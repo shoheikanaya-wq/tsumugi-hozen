@@ -1,13 +1,15 @@
 {
+  "id": "/tsumugi-hozen/",
   "name": "紬 保全パートナー",
   "short_name": "紬",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": "/tsumugi-hozen/index.html",
+  "scope": "/tsumugi-hozen/",
   "display": "standalone",
   "background_color": "#1d2636",
   "theme_color": "#2b3a55",
   "icons": [
-    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ]
 }
