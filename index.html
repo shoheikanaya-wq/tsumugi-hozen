@@ -31,12 +31,13 @@ textarea{width:100%;min-height:110px;border-radius:12px;border:2px solid #46556f
 .mic{font-size:15px;color:#ffb86b;font-weight:800;min-height:22px;margin:4px 0}
 label.sw{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;min-height:48px}
 label.sw input{width:26px;height:26px}
+.rep h3{margin:10px 0 4px;font-size:16px;color:#ffb86b}.rep ul{margin:4px 0 6px;padding-left:22px;font-size:17px;line-height:1.55}.rep .urgent{background:#5a2420;border-left:6px solid #c9453b}.rep .foot{font-size:12px;color:#a9b6cc;line-height:1.5;margin-top:8px}.fb{display:flex;gap:8px}.fb .btn{min-height:52px;font-size:17px}
 .note{font-size:13px;color:#a9b6cc;line-height:1.6;margin-top:10px}
 </style>
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 0.1</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 0.5</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script>
@@ -50,7 +51,7 @@ var S={token:0,rec:null,voice:null,inspect:null};
 
 function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
-function cfg(){return Object.assign({voice:true,listen:false},load(KEY.cfg,{}))}
+function cfg(){return Object.assign({voice:true,listen:false,ai:false,useLog:false,key:'',model:'gemini-flash-latest'},load(KEY.cfg,{}))}
 function items(){var a=load(KEY.items,null);return a&&a.length?a:DEFAULT_ITEMS}
 function log(){return load(KEY.log,[])}
 function addLog(e){var l=log();l.unshift(e);save(KEY.log,l.slice(0,500))}
@@ -95,15 +96,15 @@ function home(){
   var l=log().filter(function(x){return x.type==='inspect'});
   var last=l[0]?('前回の点検:'+l[0].at+'(異常'+l[0].ng+'・気になる'+l[0].warn+')'):'まだ点検の記録はありません';
   view('紬',false,
-   '<div class="say"><small>紬</small>おつかれさまです。今日もいっしょに見ていきましょう。<br><span style="font-size:15px;font-weight:700;color:#a9b6cc">'+esc(last)+'</span></div>'+
+   '<div class="say"><small>紬</small>おつかれさまです。気になることがあれば、まず話しかけてください。一緒に考えます。<br><span style="font-size:15px;font-weight:700;color:#a9b6cc">'+esc(last)+'</span></div>'+
+   '<button class="btn" id="bChat" style="background:#6b4fc9;min-height:84px;font-size:22px">🗨 紬に話しかける</button>'+
    '<button class="btn" id="bStart">▶ 稼働中点検をはじめる</button>'+
    '<button class="btn ng" id="bAbn">⚠ 異常を記録する</button>'+
-   '<button class="btn gray" id="bMemo">💬 紬に相談・メモ</button>'+
    '<button class="btn gray" id="bLog">📖 見聞録を見る</button>'+
    '<button class="btn line" id="bSet">⚙ 設定・点検項目</button>'+
    '<div class="note">記録はこのスマホの中だけに保存されます。外部には送りません。</div>');
   on('bStart',startInspect);on('bAbn',function(){memo('異常を記録する','abnormal','どの設備で、どんな異常ですか?')});
-  on('bMemo',function(){memo('紬に相談・メモ','consult','気になったこと、迷っていることを話してください。')});
+  on('bMemo',function(){memo('紬に相談・メモ','consult','気になったこと、迷っていることを話してください。')});on('bChat',chat);
   on('bLog',showLog);on('bSet',settings);
 }
 B.onclick=home;
@@ -146,10 +147,16 @@ function detail(it,r){
   view(r==='ng'?'異常':'気になる',true,
    '<div class="say"><small>紬</small>'+esc(it)+':'+(r==='ng'?'異常':'気になる')+'ですね。どんな様子か、教えてください。</div>'+
    '<textarea id="mm" placeholder="様子・場所・いつから(声でも入力できます)"></textarea><div class="mic" id="mic"></div>'+
-   '<button class="btn gray" id="mMic">🎤 声でメモ</button><button class="btn" id="mGo">記録して次へ ▶</button>');
+   '<button class="btn gray" id="mMic">🎤 声でメモ</button><button class="btn" id="mGo">記録して、紬の返事を聞く</button>');
   speak('どんな様子か、教えてください。');
   on('mMic',function(){listen(function(t){var e=document.getElementById('mm');e.value=(e.value?e.value+' ':'')+t;document.getElementById('mic').textContent=''},function(m){document.getElementById('mic').textContent=m})});
-  on('mGo',function(){stopAll();I.results.push({item:it,r:r,memo:document.getElementById('mm').value.trim()});I.i++;ask()});
+  on('mGo',function(){
+    stopAll();var memoText=document.getElementById('mm').value.trim();
+    var rec={item:it,r:r,memo:memoText};I.results.push(rec);
+    if(!memoText){I.i++;return ask()}
+    var ent={id:'i'+Date.now(),at:now(),equip:I.equip};
+    replyScreen(it+'('+(r==='ng'?'異常':'気になる')+')',(it+':'+memoText),ent.at,ent,'点検のつづきへ ▶',function(){rec.fbNote=ent.fbNote||'';rec.feedback=ent.feedback||0;I.i++;ask()});
+  });
 }
 function learn(){
   var I=S.inspect;
@@ -168,18 +175,110 @@ function learn(){
   });
 }
 
+/* ---- 紬の返答(ルールによる一般的な目安。AIなしで動く) ---- */
+var RULES=[
+ {k:/焦げ|煙|発煙|火花|スパーク|発火|燃|感電|ビリビリ|爆|ガス|異臭|強いにおい/,urgent:true,name:'安全に関わる',
+  now:['安全な距離をとり、無理に近づかない','設備の停止・遮断は、社内の手順と上の人の指示に従う(自己判断で触らない)','すぐ上の人・担当者へ連絡する','必要なら、社内の緊急連絡のルールに従う'],
+  ask:['いま、周りに人はいますか?','煙・火・においは続いていますか?']},
+ {k:/漏れ|漏洩|にじ|垂れ|オイル|油|水が|エア漏れ/,name:'漏れ',
+  now:['触らず、場所と量を目で確認する','足元の滑り・感電・火気に注意する','立入制限や受けの処置は、社内の手順に従う'],
+  ask:['何が漏れていますか(油・水・エア・薬品など)?','量は増えていますか?','設備は動いていますか?']},
+ {k:/異音|音が|うるさ|きしむ|カラカラ|ガラガラ|キーン|ゴロゴロ/,name:'音',
+  now:['近づきすぎず、音の出どころを確かめる','可能なら動画や録音を残す','いつもと明らかに違うなら、運転の継続を上の人に確認する'],
+  ask:['いつから聞こえますか?','負荷や回転数で変わりますか?','前回の点検と比べて、どう違いますか?']},
+ {k:/振動|ぶれ|揺れ|ガタ/,name:'振動',
+  now:['触らず、揺れの場所と大きさを確認する','ボルトの緩み・摩耗など、見える範囲を確認する','強い場合は、運転の継続を上の人に確認する'],
+  ask:['いつから、どこが揺れますか?','負荷や回転数で変わりますか?','前回と比べて、どう違いますか?']},
+ {k:/熱|あつい|熱い|温度|過熱|発熱|ぬるい/,name:'熱・温度',
+  now:['素手で触らず、測定器があれば値を測る','前回の値や、同じ設備の他の箇所と比べる','周りの換気・冷却の状態を確認する'],
+  ask:['何度くらいですか(測れていますか)?','前回との差はどれくらいですか?','負荷が上がったときだけですか?']},
+ {k:/計器|メーター|数値|値が|圧力|電流|電圧|警報|アラーム/,name:'計器・数値',
+  now:['値を、写真かメモで残す','前回の値・基準の値と比べる','他の計器にも変化がないか見る'],
+  ask:['いまの値と、いつもの値は?','値は変動していますか、一定ですか?','警報は出ていますか?']},
+ {k:/緩み|ゆるみ|破損|割れ|欠け|摩耗|すり減|錆|さび|ひび/,name:'緩み・破損・摩耗',
+  now:['場所と程度を、写真で残す','増し締めや交換は、社内の手順と上の人の指示に従う','進行していないか、次の点検で比べる'],
+  ask:['どこが、どの程度ですか?','前回から進んでいますか?']}
+];
+function replyFor(text){
+  var hit=RULES.filter(function(r){return r.k.test(text)})[0];
+  if(!hit)hit={name:'ようす',now:['安全を確かめてから、様子を写真やメモで残す','いつもと違う点を、前回の記録と比べる','迷うときは、一人で判断せず、上の人に相談する'],ask:['いつから気づきましたか?','前回の点検と比べて、何が違いますか?','設備は止まっていますか?']};
+  return hit;
+}
+function grams(t){t=String(t||'').replace(/[\s。、,.:;()（）「」【】\n]/g,'');var g={};for(var i=0;i<t.length-1;i++)g[t.substr(i,2)]=1;return g}
+function similar(text,selfId){
+  var a=grams(text),ka=Object.keys(a);if(!ka.length)return[];
+  var pool=[];
+  log().forEach(function(x){
+    if(x.type==='inspect'){(x.results||[]).forEach(function(rs){if(rs.memo)pool.push({id:x.id,at:x.at,equip:x.equip,text:rs.item+':'+rs.memo,fb:rs.feedback,note:rs.fbNote||'',learn:x.learn||''})})}
+    else if(x.text)pool.push({id:x.id,at:x.at,text:x.text,fb:x.feedback,note:x.fbNote||''});
+  });
+  return pool.filter(function(x){return x.id!==selfId}).map(function(x){
+    var b=grams(x.text),kb=Object.keys(b),n=0;ka.forEach(function(k){if(b[k])n++});
+    x.score=n/Math.max(1,(ka.length+kb.length-n));return x;
+  }).filter(function(x){return x.score>=0.12}).sort(function(a,b){return b.score-a.score}).slice(0,2);
+}
+function similarHtml(list){
+  if(!list.length)return '';
+  return '<h3>前にも似た記録があります</h3>'+list.map(function(x){
+    return '<div class="card"><div style="font-size:13px;color:#a9b6cc">'+esc(x.at)+(x.equip?' / '+esc(x.equip):'')+'</div><div style="font-size:16px;margin-top:4px">'+esc(x.text)+'</div>'+
+      (x.note?'<div style="font-size:15px;color:#ffb86b;margin-top:4px">あなたのメモ:'+esc(x.note)+'</div>':'')+(x.learn?'<div style="font-size:14px;color:#a9b6cc;margin-top:4px">学び:'+esc(x.learn)+'</div>':'')+'</div>'}).join('');
+}
+function replyHtml(h,text,at,selfId){
+  var rep=(h.urgent?'<div class="card urgent"><b>⚠ 安全を最優先にしてください</b></div>':'');
+  return '<div class="rep">'+rep+
+    '<h3>まず</h3><ul>'+h.now.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>'+
+    similarHtml(similar(text,selfId))+'<h3>教えてください(分かる範囲で)</h3><ul>'+h.ask.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>'+
+    '<h3>上の人に伝えるとき</h3><div class="card" style="white-space:pre-wrap;font-size:16px">'+esc(report(text,at))+'</div>'+
+    '<div class="foot">これは一般的な目安です。停止や復旧の判断は、社内の手順と上の人の指示を最優先にしてください。</div></div>';
+}
+function report(text,at,equip){return '【報告】\n日時:'+(at||now())+'\n設備:'+(equip||'(記入)')+'\n内容:'+text+'\n気づいた経緯:(記入)\nいまの状態:(記入)\n対応:(未対応/対応済み)'}
+function speakReply(h){speak((h.urgent?'安全を最優先にしてください。':'')+'まず、'+h.now.join('。')+'。')}
+
+function askAI(text,out,done){
+  var c=cfg();
+  if(!c.ai||!c.key){out.textContent='AIへの相談は、設定でオンにすると使えます。';return}
+  out.textContent='紬が考えています…';
+  var sys='あなたは、設備保全の現場で働く人のパートナー「紬」です。やさしく、短く、日本語で答えます。安全を最優先にし、停止・復旧・分解などの判断は、必ず社内の手順と上の人の指示に従うよう伝えます。断定せず、分からないことは分からないと言い、確認すべき点を質問します。回答は、「まず」「確認すること」「上の人に伝えること」の3つの見出しで、各3項目以内の箇条書きにします。';
+  fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(c.model)+':generateContent',{
+    method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':c.key},
+    body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{role:'user',parts:[{text:text}]}]})
+  }).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
+    var t=(((d.candidates||[])[0]||{}).content||{}).parts;t=t&&t.map(function(p){return p.text||''}).join('');
+    if(!t)throw new Error('返事が空でした');out.textContent=t;done&&done(t);speak(t.slice(0,300));
+  }).catch(function(e){out.textContent='AIにつながりませんでした('+e.message+')。上の目安を参考にしてください。'});
+}
+function replyScreen(title,text,at,entry,nextLabel,nextFn){
+  var h=replyFor(text),c=cfg();
+  view(title,false,
+   '<div class="say"><small>紬</small>'+(h.urgent?'安全が心配です。まず落ち着いて、次のことをお願いします。':'教えてくれてありがとうございます。いまできることを、いっしょに整理します。')+'</div>'+
+   replyHtml(h,text,at,entry&&entry.id)+
+   (c.ai&&c.key?'<button class="btn gray" id="aiq">🤖 AIにも聞いてみる</button><div class="card" id="aiout" style="white-space:pre-wrap;font-size:16px;display:none"></div>':'')+
+   '<div class="row"><button class="btn gray" id="cp">📋 報告文をコピー</button><button class="btn gray" id="rd">🔊 読み上げ</button></div>'+
+   '<div class="say" style="font-size:16px"><small>この返事は役に立ちましたか?</small><div class="fb"><button class="btn ok" id="fy">👍 役に立った</button><button class="btn warn" id="fn">👎 違う</button></div><textarea id="fx" style="min-height:60px" placeholder="自分ならこう判断する、などを一言(声でも入力できます)"></textarea><button class="btn gray" id="fm">🎤 声で入れる</button></div>'+
+   '<button class="btn" id="nx">'+nextLabel+'</button>');
+  speakReply(h);
+  on('cp',function(){try{navigator.clipboard.writeText(report(text,at,entry&&entry.equip))}catch(e){}});
+  on('rd',function(){speakReply(h)});
+  on('aiq',function(){var o=document.getElementById('aiout');o.style.display='block';askAI(text,o,function(t){entry.ai=t.slice(0,2000);persist()})});
+  on('fm',function(){listen(function(t){var e=document.getElementById('fx');e.value=(e.value?e.value+' ':'')+t},function(){})});
+  function fb(v){entry.feedback=v;entry.fbNote=document.getElementById('fx').value.trim();persist();document.getElementById(v>0?'fy':'fn').textContent='記録しました ✓'}
+  on('fy',function(){fb(1)});on('fn',function(){fb(-1)});
+  on('nx',function(){stopAll();entry.fbNote=document.getElementById('fx').value.trim()||entry.fbNote;persist();nextFn()});
+  function persist(){var l=log();for(var i=0;i<l.length;i++){if(l[i].id===entry.id){l[i]=entry;break}}save(KEY.log,l)}
+}
+
 /* ---- メモ(異常・相談) ---- */
 function memo(title,type,prompt_){
   stopAll();
   view(title,true,'<div class="say"><small>紬</small>'+esc(prompt_)+'</div><textarea id="mm" placeholder="声でも入力できます"></textarea><div class="mic" id="mic"></div>'+
-   '<button class="btn gray" id="mMic">🎤 声でメモ</button><button class="btn" id="mGo">記録する</button>');
+   '<button class="btn gray" id="mMic">🎤 声でメモ</button><button class="btn" id="mGo">記録して、紬の返事を聞く</button>');
   speak(prompt_);
   on('mMic',function(){listen(function(t){var e=document.getElementById('mm');e.value=(e.value?e.value+' ':'')+t;document.getElementById('mic').textContent=''},function(m){document.getElementById('mic').textContent=m})});
   on('mGo',function(){
     var t=document.getElementById('mm').value.trim();if(!t)return;
-    addLog({type:type,at:now(),text:t});
-    var reply=type==='abnormal'?'記録しました。安全を最優先に、必要なら上の人へすぐ連絡してください。':'記録しました。あなたの考え方も、ここに積み重ねていきますね。';
-    view('記録しました',false,'<div class="say"><small>紬</small>'+reply+'</div><button class="btn" id="hm">ホームへ</button>');on('hm',home);speak(reply);
+    var e={id:Date.now(),type:type,at:now(),text:t,reply:replyFor(t).name};
+    addLog(e);
+    replyScreen(type==='abnormal'?'異常の記録':'相談',t,e.at,e,'ホームへ',home);
   });
 }
 
@@ -189,12 +288,66 @@ function showLog(){
   var h=l.length?l.slice(0,60).map(function(x,i){
     if(x.type==='inspect')return '<div class="card"><span class="tag '+(x.ng?'ng':x.warn?'warn':'ok')+'">点検</span><b>'+esc(x.equip||'(設備未入力)')+'</b><div class="m">'+esc(x.at)+'\n異常 '+x.ng+' / 気になる '+x.warn+
       (x.results.filter(function(r){return r.r!=='ok'}).map(function(r){return '\n・'+r.item+'('+(r.r==='ng'?'異常':'気になる')+'):'+(r.memo||'')}).join(''))+(x.learn?'\n📝 学び:'+x.learn:'')+'</div></div>';
+    if(x.type==='chat')return '<div class="card"><span class="tag">質疑</span><b>'+esc(x.at)+'</b><div class="m">Q:'+esc(x.text)+'\nA:'+esc((x.answer||'').slice(0,300))+'</div></div>';
     return '<div class="card"><span class="tag '+(x.type==='abnormal'?'ng':'')+'">'+(x.type==='abnormal'?'異常':'相談')+'</span><b>'+esc(x.at)+'</b><div class="m">'+esc(x.text)+'</div></div>';
   }).join(''):'<div class="say"><small>紬</small>まだ記録がありません。</div>';
   view('見聞録',true,h+'<button class="btn gray" id="exp">⬇ 記録を書き出す(テキスト)</button><button class="btn line" id="cp">📋 コピーする</button>');
-  function text(){return log().map(function(x){return x.type==='inspect'?('[点検] '+x.at+' '+x.equip+' 異常'+x.ng+' 気になる'+x.warn+x.results.filter(function(r){return r.r!=='ok'}).map(function(r){return ' / '+r.item+':'+r.memo}).join('')+(x.learn?' / 学び:'+x.learn:'')):('['+(x.type==='abnormal'?'異常':'相談')+'] '+x.at+' '+x.text)}).join('\n')}
+  function text(){return log().map(function(x){return x.type==='inspect'?('[点検] '+x.at+' '+x.equip+' 異常'+x.ng+' 気になる'+x.warn+x.results.filter(function(r){return r.r!=='ok'}).map(function(r){return ' / '+r.item+':'+r.memo}).join('')+(x.learn?' / 学び:'+x.learn:'')):(x.type==='chat'?('[質疑] '+x.at+' Q:'+x.text+' A:'+(x.answer||'').slice(0,300)):'['+(x.type==='abnormal'?'異常':'相談')+'] '+x.at+' '+x.text+(x.feedback?' / '+(x.feedback>0?'役に立った':'違う')+(x.fbNote?':'+x.fbNote:''):''))}).join('\n')}
   on('exp',function(){var b=new Blob([text()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tsumugi-kenmonroku.txt';a.click()});
   on('cp',function(){try{navigator.clipboard.writeText(text())}catch(e){}});
+}
+
+/* ---- 質問(会話) ---- */
+var SYS='あなたは、設備保全の現場で働く人のパートナー「紬」です。やさしく、短く、日本語で答えます。安全を最優先にし、停止・復旧・分解などの判断は、必ず社内の手順と上の人の指示に従うよう伝えます。断定せず、分からないことは分からないと言い、確認すべき点を質問します。専門用語は、できるだけ平易に説明します。';
+function callAI(history,extra){
+  var c=cfg();
+  return fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(c.model)+':generateContent',{
+    method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':c.key},
+    body:JSON.stringify({systemInstruction:{parts:[{text:SYS+(extra||'')}]},contents:history.map(function(m){return{role:m.role==='user'?'user':'model',parts:[{text:m.text}]}})})
+  }).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
+    var t=(((d.candidates||[])[0]||{}).content||{}).parts;t=t&&t.map(function(p){return p.text||''}).join('');
+    if(!t)throw new Error('返事が空でした');return t;
+  });
+}
+function localAnswer(q){
+  var h=replyFor(q),sim=similar(q,null);
+  return (h.urgent?'⚠ 安全を最優先にしてください。\n':'')+'まず:\n'+h.now.map(function(x){return '・'+x}).join('\n')+'\n\n教えてください:\n'+h.ask.map(function(x){return '・'+x}).join('\n')+
+    (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
+    '\n\n(AIの会話はオフです。設定でオンにすると、もっと具体的に答えられます)';
+}
+function chat(){
+  stopAll();S.chat=S.chat||[];var c=cfg();
+  view('紬に話しかける',true,
+   '<div class="say" style="font-size:16px"><small>紬</small>'+(c.ai&&c.key?'AIがつながっています。分からないことを、何でも聞いてください。':'質問してください。いまは、一般的な目安と過去の記録で答えます(AIはオフ)。')+'</div>'+
+   '<div id="cl"></div><textarea id="cq" placeholder="質問や状況を入力(声でも入力できます)" style="min-height:80px"></textarea><div class="mic" id="mic"></div>'+
+   '<div class="row"><button class="btn gray" id="cMic">🎤 声で</button><button class="btn" id="cSend">送る ▶</button></div>'+
+   '<button class="btn line" id="cNew">新しい質問にする</button>');
+  function paint(){
+    document.getElementById('cl').innerHTML=S.chat.map(function(m){
+      return '<div class="card" style="'+(m.role==='user'?'margin-left:30px;background:#33496e':'margin-right:30px')+';white-space:pre-wrap;font-size:17px;line-height:1.55">'+esc(m.text)+'</div>'}).join('');
+    M.scrollTop=M.scrollHeight;
+  }
+  paint();
+  on('cMic',function(){listen(function(t){var e=document.getElementById('cq');e.value=(e.value?e.value+' ':'')+t;document.getElementById('mic').textContent=''},function(m){document.getElementById('mic').textContent=m})});
+  on('cNew',function(){S.chat=[];chat()});
+  on('cSend',function(){
+    var q=document.getElementById('cq').value.trim();if(!q)return;
+    document.getElementById('cq').value='';
+    S.chat.push({role:'user',text:q});S.chat.push({role:'model',text:'…'});paint();
+    var idx=S.chat.length-1;
+    function done(a){S.chat[idx].text=a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
+      var en={id:Date.now(),type:'chat',at:now(),text:q,answer:a};addLog(en);
+      var fbx=document.createElement('div');fbx.className='row';fbx.innerHTML='<button class="btn ok" type="button">👍 役に立った</button><button class="btn warn" type="button">👎 違う</button>';
+      document.getElementById('cl').appendChild(fbx);
+      function setfb(v,btn){en.feedback=v;var l=log();for(var i=0;i<l.length;i++){if(l[i].id===en.id){l[i]=en;break}}save(KEY.log,l);btn.textContent='記録しました ✓'}
+      fbx.children[0].onclick=function(){setfb(1,this)};fbx.children[1].onclick=function(){setfb(-1,this)};M.scrollTop=M.scrollHeight}
+    var cc=cfg();
+    if(cc.ai&&cc.key){
+      var extra='';
+      if(cc.useLog){var sm=similar(q,null);if(sm.length)extra='\n\n【この人の過去の記録(参考)】\n'+sm.map(function(x){return x.at+' '+x.text+(x.note?'(本人のメモ:'+x.note+')':'')}).join('\n')}
+      callAI(S.chat.slice(0,-1),extra).then(done).catch(function(e){done('AIにつながりませんでした('+e.message+')。\n\n'+localAnswer(q))});
+    }else done(localAnswer(q));
+  });
 }
 
 /* ---- 設定 ---- */
@@ -204,14 +357,27 @@ function settings(){
    '<label class="sw"><input type="checkbox" id="cv"'+(c.voice?' checked':'')+'>紬の声を出す</label>'+
    '<label class="sw"><input type="checkbox" id="cl"'+(c.listen?' checked':'')+'>質問のあと、自動で声を聞き取る(ヘッドセット向け)</label>'+
    '<div class="say" style="font-size:16px"><small>点検項目(1行に1つ)</small>設備に合わせて書き換えられます。この内容はこのスマホの中だけに保存されます。</div>'+
-   '<textarea id="it" style="min-height:180px">'+esc(items().join('\n'))+'</textarea>'+
-   '<button class="btn ok" id="sv">保存する</button><button class="btn line" id="rs">初期の項目にもどす</button>'+
-   '<div class="note"><b>注意:</b>会社の機密にあたる情報(設備の型式・図面・数値など)は、社内のルールを確認するまで、ここに入れないでください。</div>');
-  on('sv',function(){var v=document.getElementById('it').value.split('\n').map(function(s){return s.trim()}).filter(Boolean);save(KEY.items,v.length?v:DEFAULT_ITEMS);save(KEY.cfg,{voice:document.getElementById('cv').checked,listen:document.getElementById('cl').checked});home()});
+   '<textarea id="it" style="min-height:150px">'+esc(items().join('\n'))+'</textarea>'+
+   '<div class="say" style="font-size:16px;margin-top:14px"><small>AIに相談する(Gemini)・初期はオフ</small>オンにすると、メモの内容がGoogleのAIに送られます。</div>'+
+   '<label class="sw"><input type="checkbox" id="ca"'+(c.ai?' checked':'')+'>AIに相談できるようにする</label>'+
+   '<input id="ck" type="password" placeholder="Gemini APIキー(このスマホの中だけに保存)" value="'+esc(c.key)+'" style="width:100%;min-height:48px;border-radius:12px;border:2px solid #46556f;background:#141b28;color:#eef2f8;font-size:16px;padding:0 10px;margin:6px 0">'+
+   '<input id="cm" placeholder="モデル名" value="'+esc(c.model)+'" style="width:100%;min-height:48px;border-radius:12px;border:2px solid #46556f;background:#141b28;color:#eef2f8;font-size:16px;padding:0 10px;margin:0 0 6px">'+
+   '<label class="sw"><input type="checkbox" id="cu"'+(c.useLog?' checked':'')+'>質問のとき、似た過去の記録も参考として送る(記録の一部がAIに送られます)</label>'+
+   '<label class="sw"><input type="checkbox" id="cc">会社の機密(設備の型式・図面・数値など)は入れない。無料枠では、入力が改善に使われる場合があることを理解しました</label>'+
+   '<button class="btn ok" id="sv">保存する</button><button class="btn line" id="rs">点検項目を初期にもどす</button>'+
+   '<div class="note"><b>注意:</b>社内のルールを確認するまでは、AIの相談をオンにしないでください。オフのままでも、紬は一般的な目安で返事をします。</div>');
+  on('sv',function(){
+    var v=document.getElementById('it').value.split('\n').map(function(s){return s.trim()}).filter(Boolean);
+    var ai=document.getElementById('ca').checked,ok=document.getElementById('cc').checked;
+    if(ai&&!ok){alert('AIを使うには、注意事項のチェックが必要です');return}
+    save(KEY.items,v.length?v:DEFAULT_ITEMS);
+    save(KEY.cfg,{voice:document.getElementById('cv').checked,listen:document.getElementById('cl').checked,ai:ai,useLog:document.getElementById('cu').checked,key:document.getElementById('ck').value.trim(),model:document.getElementById('cm').value.trim()||'gemini-flash-latest'});
+    home();
+  });
   on('rs',function(){save(KEY.items,DEFAULT_ITEMS);settings()});
 }
 
-window.TSU_TEST={items:items,log:log};
+window.TSU_TEST={items:items,log:log,replyFor:replyFor,report:report,similar:similar};
 home();
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(function(){})}
 })();
