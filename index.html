@@ -37,7 +37,7 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 0.6</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 0.9</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script>
@@ -97,14 +97,12 @@ function home(){
   var last=l[0]?('前回の点検:'+l[0].at+'(異常'+l[0].ng+'・気になる'+l[0].warn+')'):'まだ点検の記録はありません';
   view('紬',false,
    '<div class="say"><small>紬</small>おつかれさまです。気になることがあれば、まず話しかけてください。一緒に考えます。<br><span style="font-size:15px;font-weight:700;color:#a9b6cc">'+esc(last)+'</span></div>'+
-   '<button class="btn" id="bChat" style="background:#6b4fc9;min-height:84px;font-size:22px">🗨 紬に話しかける</button>'+
-   '<button class="btn" id="bStart">▶ 稼働中点検をはじめる</button>'+
-   '<button class="btn ng" id="bAbn">⚠ 異常を記録する</button>'+
-   '<button class="btn gray" id="bLog">📖 見聞録を見る</button>'+
-   '<button class="btn line" id="bSet">⚙ 設定・点検項目</button>'+
+   '<button class="btn" id="bChat" style="background:#6b4fc9;min-height:130px;font-size:28px">🗨 紬に話しかける<br><small style="font-size:16px;font-weight:700">状況を話すだけ。正常か異常かも、一緒に考えます</small></button>'+
+   '<div class="row"><button class="btn gray" id="bStart">▶ 点検をはじめる</button><button class="btn gray" id="bLog">📖 見聞録</button></div>'+
+   '<button class="btn line" id="bSet" style="min-height:48px;font-size:16px">⚙ 設定</button>'+
    '<div class="note">記録はこのスマホの中だけに保存されます。外部には送りません。</div>');
-  on('bStart',startInspect);on('bAbn',function(){memo('異常を記録する','abnormal','どの設備で、どんな異常ですか?')});
-  on('bMemo',function(){memo('紬に相談・メモ','consult','気になったこと、迷っていることを話してください。')});on('bChat',chat);
+  on('bStart',startInspect);
+  on('bChat',chat);
   on('bLog',showLog);on('bSet',settings);
 }
 B.onclick=home;
@@ -252,14 +250,17 @@ function replyScreen(title,text,at,entry,nextLabel,nextFn){
   view(title,false,
    '<div class="say"><small>紬</small>'+(h.urgent?'安全が心配です。まず落ち着いて、次のことをお願いします。':'教えてくれてありがとうございます。いまできることを、いっしょに整理します。')+'</div>'+
    replyHtml(h,text,at,entry&&entry.id)+
-   (c.ai&&c.key?'<button class="btn gray" id="aiq">🤖 AIにも聞いてみる</button><div class="card" id="aiout" style="white-space:pre-wrap;font-size:16px;display:none"></div>':'')+
+   (c.ai&&c.key?'<div id="aigate"></div><button class="btn gray" id="aiq">🤖 外部の情報も使って調べる</button><div class="card" id="aiout" style="white-space:pre-wrap;font-size:16px;display:none"></div>':'')+
    '<div class="row"><button class="btn gray" id="cp">📋 報告文をコピー</button><button class="btn gray" id="rd">🔊 読み上げ</button></div>'+
    '<div class="say" style="font-size:16px"><small>この返事は役に立ちましたか?</small><div class="fb"><button class="btn ok" id="fy">👍 役に立った</button><button class="btn warn" id="fn">👎 違う</button></div><textarea id="fx" style="min-height:60px" placeholder="自分ならこう判断する、などを一言(声でも入力できます)"></textarea><button class="btn gray" id="fm">🎤 声で入れる</button></div>'+
    '<button class="btn" id="nx">'+nextLabel+'</button>');
   speakReply(h);
   on('cp',function(){try{navigator.clipboard.writeText(report(text,at,entry&&entry.equip))}catch(e){}});
   on('rd',function(){speakReply(h)});
-  on('aiq',function(){var o=document.getElementById('aiout');o.style.display='block';askAI(text,o,function(t){entry.ai=t.slice(0,2000);persist()})});
+  function runAI(){var o=document.getElementById('aiout'),g=document.getElementById('aigate');if(!o||!g||g.firstChild)return;
+    gateAI(text,cfg(),function(safe){o.style.display='block';entry.sent=safe.slice(0,500);askAI(safe,o,function(t){entry.ai=t.slice(0,2000);persist()})},function(){},g)}
+  on('aiq',runAI);
+  if(c.ai&&c.key&&entry)setTimeout(runAI,400);
   on('fm',function(){listen(function(t){var e=document.getElementById('fx');e.value=(e.value?e.value+' ':'')+t},function(){})});
   function fb(v){entry.feedback=v;entry.fbNote=document.getElementById('fx').value.trim();persist();document.getElementById(v>0?'fy':'fn').textContent='記録しました ✓'}
   on('fy',function(){fb(1)});on('fn',function(){fb(-1)});
@@ -315,25 +316,42 @@ function localAnswer(q){
     (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
     '\n\n(AIの会話はオフです。設定でオンにすると、もっと具体的に答えられます)';
 }
-function sanitize(t){
+function sanitize(t,strict){
   var c=cfg(),out=String(t),hits=[];
   String(c.ng||'').split(/\n/).map(function(x){return x.trim()}).filter(Boolean).forEach(function(w){
     if(out.indexOf(w)>=0){hits.push(w);out=out.split(w).join('(伏せ字)')}});
-  out=out.replace(/[^\s、。,.「」()（）]{1,10}(ライン|号機|工場|棟|課|部門|設備室)/g,function(m){hits.push(m);return '(設備・場所)'});
-  out=out.replace(/[A-Za-zＡ-Ｚａ-ｚ]+[-‐ー－]?[0-9０-９][A-Za-z0-9０-９\-‐－_\/\.]*/g,function(m){hits.push(m);return '(型式・番号)'});
-  out=out.replace(/[0-9０-９][0-9０-９,\.]*\s*(MPa|kPa|Pa|℃|度|A|V|kW|W|rpm|Hz|mm|cm|m|kg|t|L|%|％)/g,function(m){hits.push(m);return '(数値)'});
+  out=out.replace(/[^\s、。,.「」()（）]{1,10}(ライン|号機|工場|棟|課|部門|設備室)/g,function(m){var p=/^[のがはをにでと]/.test(m)?m.charAt(0):'';hits.push(p?m.slice(1):m);return p+'(設備・場所)'});
+  if(strict)out=out.replace(/[A-Za-zＡ-Ｚａ-ｚ]+[-‐ー－]?[0-9０-９][A-Za-z0-9０-９\-‐－_\/\.]*/g,function(m){hits.push(m);return '(型式・番号)'});
+  if(strict)out=out.replace(/[0-9０-９][0-9０-９,\.]*\s*(MPa|kPa|Pa|℃|度|A|V|kW|W|rpm|Hz|mm|cm|m|kg|t|L|%|％)/g,function(m){hits.push(m);return '(数値)'});
   return {text:out,hits:hits};
 }
-function gateAI(q,cc,onSend,onSkip){
-  var r=sanitize(q),box=document.createElement('div');box.className='card';
-  box.innerHTML='<div style="font-weight:800;margin-bottom:6px">🔒 外部のAIに送る前の確認</div>'+
-   '<div style="font-size:15px;line-height:1.5;margin-bottom:8px">'+(r.hits.length?'次の言葉を伏せ字にしました:<br><b>'+r.hits.map(esc).join('、')+'</b>':'伏せ字にした言葉はありません。')+'<br>送るのは、下の文章だけです。会社の情報が残っていないか、自分の目で確認し、消すか直してください。</div>'+
-   '<textarea style="min-height:110px">'+esc(r.text)+'</textarea>'+
-   '<div class="row"><button class="btn ok" type="button">この内容で送る</button><button class="btn gray" type="button">送らない</button></div>';
-  document.getElementById('cl').appendChild(box);try{box.scrollIntoView({block:'start'})}catch(e){M.scrollTop=M.scrollHeight}
-  var ta=box.querySelector('textarea'),bs=box.querySelectorAll('button');
-  bs[0].onclick=function(){var t=ta.value.trim();box.remove();if(t)onSend(t)};
-  bs[1].onclick=function(){box.remove();onSkip()};
+function gateAI(q,cc,onSend,onSkip,host){
+  var strict=false,box=document.createElement('div');box.className='card';
+  box.innerHTML='<div style="font-weight:800;font-size:19px;margin-bottom:6px">🔎 外部の情報も調べますか?</div>'+
+   '<div style="font-size:15px;margin-bottom:6px">会社が分かる言葉は伏せ字にしました。送るのは、この文章だけです。</div>'+
+   '<textarea style="min-height:80px"></textarea>'+
+   '<div class="row"><button class="btn ok" type="button" id="gs">調べる</button><button class="btn gray" type="button" id="gn">やめる</button></div>'+
+   '<details style="margin-top:8px"><summary style="font-size:15px">内容を直す・伏せ字を強める</summary>'+
+   '<div class="row"><button class="btn ok" type="button" data-l="0">ふつう</button><button class="btn gray" type="button" data-l="1">きびしく</button></div>'+
+   '<div id="gh" style="font-size:14px;line-height:1.5;margin:6px 0"></div>'+
+   '<div style="font-size:14px;color:#a9b6cc">会社名・工場名・ライン名・人名・図面・生産量は書かないでください。</div></details>';
+  (host||document.getElementById('cl')).appendChild(box);try{box.scrollIntoView({block:'start'})}catch(e){M.scrollTop=M.scrollHeight}
+  var ta=box.querySelector('textarea'),gh=box.querySelector('#gh'),lv=box.querySelectorAll('[data-l]');
+  function paint(){var r=sanitize(q,strict);ta.value=r.text;
+    gh.innerHTML=(r.hits.length?'伏せ字にした言葉:<b>'+r.hits.map(esc).join('、')+'</b>':'伏せ字にした言葉はありません。');
+    lv[0].className='btn '+(strict?'gray':'ok');lv[1].className='btn '+(strict?'ok':'gray')}
+  lv[0].onclick=function(){strict=false;paint()};lv[1].onclick=function(){strict=true;paint()};
+  paint();
+  box.querySelector('#gs').onclick=function(){var t=ta.value.trim();box.remove();if(t)onSend(t)};
+  box.querySelector('#gn').onclick=function(){box.remove();onSkip()};
+}
+function classify(q){
+  var h=replyFor(q);
+  if(h.urgent)return '⚠ 異常のおそれ(安全を最優先に)';
+  if(/異音|漏れ|煙|焦げ|臭い|におい|発熱|熱い|振動|止ま|停止|エラー|警報|アラーム|おかしい|変な|いつもと違/.test(q))return '気になる状態';
+  if(/正常|問題な|異常な|変わりな/.test(q))return '正常のようです';
+  if(/[?？]|どう|なぜ|なに|何|どれ|いつ|教えて/.test(q))return '質問';
+  return '相談・メモ';
 }
 function chat(){
   stopAll();S.chat=S.chat||[];var c=cfg();
@@ -353,10 +371,10 @@ function chat(){
   on('cSend',function(){
     var q=document.getElementById('cq').value.trim();if(!q)return;
     document.getElementById('cq').value='';
-    S.chat.push({role:'user',text:q});S.chat.push({role:'model',text:'…'});paint();
+    S.chat.push({role:'user',text:q});S.chat.push({role:'model',text:'…'});paint();var kind=classify(q);
     var idx=S.chat.length-1;
-    function done(a){S.chat[idx].text=a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
-      var en={id:Date.now(),type:'chat',at:now(),text:q,answer:a};addLog(en);
+    function done(a){S.chat[idx].text='【紬の見立て:'+kind+'】\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
+      var en={id:Date.now(),type:'chat',at:now(),text:q,answer:a,kind:kind};addLog(en);
       var fbx=document.createElement('div');fbx.className='row';fbx.innerHTML='<button class="btn ok" type="button">👍 役に立った</button><button class="btn warn" type="button">👎 違う</button>';
       document.getElementById('cl').appendChild(fbx);
       function setfb(v,btn){en.feedback=v;var l=log();for(var i=0;i<l.length;i++){if(l[i].id===en.id){l[i]=en;break}}save(KEY.log,l);btn.textContent='記録しました ✓'}
@@ -367,7 +385,7 @@ function chat(){
       gateAI(q,cc,function(safe){
         var ai={role:'model',text:'…'};S.chat.push(ai);paint();
         var extra='';
-        if(cc.useLog){var sm=similar(safe,null);if(sm.length)extra='\n\n【過去の記録(参考)】\n'+sm.map(function(x){return sanitize(x.text).text}).join('\n')}
+        if(cc.useLog){var sm=similar(safe,null);if(sm.length)extra='\n\n【過去の記録(参考)】\n'+sm.map(function(x){return sanitize(x.text,true).text}).join('\n')}
         callAI([{role:'user',text:safe}],extra).then(function(a){ai.text='🤖 AIの返事(送った内容:'+safe.slice(0,40)+(safe.length>40?'…':'')+')\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
           addLog({id:Date.now()+1,type:'chat',at:now(),text:'[外部AIに送信] '+safe,answer:a,sent:true})})
         .catch(function(e){ai.text='AIにつながりませんでした('+e.message+')';paint()});
