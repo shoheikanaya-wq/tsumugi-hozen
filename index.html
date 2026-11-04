@@ -37,7 +37,7 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 0.9</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.0</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script>
@@ -292,10 +292,11 @@ function showLog(){
     if(x.type==='chat')return '<div class="card"><span class="tag">質疑</span><b>'+esc(x.at)+'</b><div class="m">Q:'+esc(x.text)+'\nA:'+esc((x.answer||'').slice(0,300))+'</div></div>';
     return '<div class="card"><span class="tag '+(x.type==='abnormal'?'ng':'')+'">'+(x.type==='abnormal'?'異常':'相談')+'</span><b>'+esc(x.at)+'</b><div class="m">'+esc(x.text)+'</div></div>';
   }).join(''):'<div class="say"><small>紬</small>まだ記録がありません。</div>';
-  view('見聞録',true,h+'<button class="btn gray" id="exp">⬇ 記録を書き出す(テキスト)</button><button class="btn line" id="cp">📋 コピーする</button>');
+  view('見聞録',true,h+'<button class="btn gray" id="exp">⬇ 記録を書き出す(テキスト)</button><button class="btn line" id="cp">📋 コピーする</button>'+(l.length?'<button class="btn line" id="dl" style="color:#ff9b9b">🗑 見聞録をすべて消す</button>':''));
   function text(){return log().map(function(x){return x.type==='inspect'?('[点検] '+x.at+' '+x.equip+' 異常'+x.ng+' 気になる'+x.warn+x.results.filter(function(r){return r.r!=='ok'}).map(function(r){return ' / '+r.item+':'+r.memo}).join('')+(x.learn?' / 学び:'+x.learn:'')):(x.type==='chat'?('[質疑] '+x.at+' Q:'+x.text+' A:'+(x.answer||'').slice(0,300)):'['+(x.type==='abnormal'?'異常':'相談')+'] '+x.at+' '+x.text+(x.feedback?' / '+(x.feedback>0?'役に立った':'違う')+(x.fbNote?':'+x.fbNote:''):''))}).join('\n')}
   on('exp',function(){var b=new Blob([text()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tsumugi-kenmonroku.txt';a.click()});
   on('cp',function(){try{navigator.clipboard.writeText(text())}catch(e){}});
+  var armed=false;on('dl',function(){var b=document.getElementById('dl');if(!armed){armed=true;b.textContent='もう一度押すと、すべて消えます(元に戻せません)';setTimeout(function(){armed=false;if(b)b.textContent='🗑 見聞録をすべて消す'},5000)}else{save(KEY.log,[]);showLog()}});
 }
 
 /* ---- 質問(会話) ---- */
@@ -319,7 +320,8 @@ function localAnswer(q){
 function sanitize(t,strict){
   var c=cfg(),out=String(t),hits=[];
   String(c.ng||'').split(/\n/).map(function(x){return x.trim()}).filter(Boolean).forEach(function(w){
-    if(out.indexOf(w)>=0){hits.push(w);out=out.split(w).join('(伏せ字)')}});
+    var p=w.split(/[=＝]/),from=p[0].trim(),to=(p[1]||'').trim();
+    if(from&&out.indexOf(from)>=0){hits.push(to?from+'→'+to:from);out=out.split(from).join(to||'(伏せ字)')}});
   out=out.replace(/[^\s、。,.「」()（）]{1,10}(ライン|号機|工場|棟|課|部門|設備室)/g,function(m){var p=/^[のがはをにでと]/.test(m)?m.charAt(0):'';hits.push(p?m.slice(1):m);return p+'(設備・場所)'});
   if(strict)out=out.replace(/[A-Za-zＡ-Ｚａ-ｚ]+[-‐ー－]?[0-9０-９][A-Za-z0-9０-９\-‐－_\/\.]*/g,function(m){hits.push(m);return '(型式・番号)'});
   if(strict)out=out.replace(/[0-9０-９][0-9０-９,\.]*\s*(MPa|kPa|Pa|℃|度|A|V|kW|W|rpm|Hz|mm|cm|m|kg|t|L|%|％)/g,function(m){hits.push(m);return '(数値)'});
@@ -338,7 +340,7 @@ function gateAI(q,cc,onSend,onSkip,host){
   (host||document.getElementById('cl')).appendChild(box);try{box.scrollIntoView({block:'start'})}catch(e){M.scrollTop=M.scrollHeight}
   var ta=box.querySelector('textarea'),gh=box.querySelector('#gh'),lv=box.querySelectorAll('[data-l]');
   function paint(){var r=sanitize(q,strict);ta.value=r.text;
-    gh.innerHTML=(r.hits.length?'伏せ字にした言葉:<b>'+r.hits.map(esc).join('、')+'</b>':'伏せ字にした言葉はありません。');
+    gh.innerHTML=(r.hits.length?'伏せ字・言い換えた言葉:<b>'+r.hits.map(esc).join('、')+'</b>':'伏せ字にした言葉はありません。');
     lv[0].className='btn '+(strict?'gray':'ok');lv[1].className='btn '+(strict?'ok':'gray')}
   lv[0].onclick=function(){strict=false;paint()};lv[1].onclick=function(){strict=true;paint()};
   paint();
@@ -406,7 +408,7 @@ function settings(){
    '<label class="sw"><input type="checkbox" id="ca"'+(c.ai?' checked':'')+'>AIに相談できるようにする</label>'+
    '<input id="ck" type="password" placeholder="Gemini APIキー(このスマホの中だけに保存)" value="'+esc(c.key)+'" style="width:100%;min-height:48px;border-radius:12px;border:2px solid #46556f;background:#141b28;color:#eef2f8;font-size:16px;padding:0 10px;margin:6px 0">'+
    '<input id="cm" placeholder="モデル名" value="'+esc(c.model)+'" style="width:100%;min-height:48px;border-radius:12px;border:2px solid #46556f;background:#141b28;color:#eef2f8;font-size:16px;padding:0 10px;margin:0 0 6px">'+
-   '<div style="font-weight:700;margin-top:8px">伏せ字にする言葉(1行に1つ。会社名・設備名・社内用語など)</div><textarea id="cng" style="min-height:90px">'+esc(c.ng||'')+'</textarea>'+
+   '<div style="font-weight:700;margin-top:8px">伏せ字・言い換えの言葉(1行に1つ)<br><span style="font-size:14px;font-weight:400">例: 山田工業=当社 / P-101=増圧ポンプ / 社内用語(=のない行は伏せ字)</span></div><textarea id="cng" style="min-height:90px">'+esc(c.ng||'')+'</textarea>'+
    '<label class="sw"><input type="checkbox" id="cu"'+(c.useLog?' checked':'')+'>質問のとき、似た過去の記録も参考として送る(記録の一部がAIに送られます)</label>'+
    '<label class="sw"><input type="checkbox" id="cc">会社の機密(設備の型式・図面・数値など)は入れない。無料枠では、入力が改善に使われる場合があることを理解しました</label>'+
    '<button class="btn ok" id="sv">保存する</button><button class="btn line" id="rs">点検項目を初期にもどす</button>'+
