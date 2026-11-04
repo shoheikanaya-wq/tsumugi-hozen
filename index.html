@@ -319,8 +319,8 @@ function sanitize(t){
   var c=cfg(),out=String(t),hits=[];
   String(c.ng||'').split(/\n/).map(function(x){return x.trim()}).filter(Boolean).forEach(function(w){
     if(out.indexOf(w)>=0){hits.push(w);out=out.split(w).join('(伏せ字)')}});
-  out=out.replace(/[A-Za-zＡ-Ｚａ-ｚ]+[-‐ー－]?[0-9０-９][A-Za-z0-9０-９\-‐－_\/\.]*/g,function(m){hits.push(m);return '(型式・番号)'});
   out=out.replace(/[^\s、。,.「」()（）]{1,10}(ライン|号機|工場|棟|課|部門|設備室)/g,function(m){hits.push(m);return '(設備・場所)'});
+  out=out.replace(/[A-Za-zＡ-Ｚａ-ｚ]+[-‐ー－]?[0-9０-９][A-Za-z0-9０-９\-‐－_\/\.]*/g,function(m){hits.push(m);return '(型式・番号)'});
   out=out.replace(/[0-9０-９][0-9０-９,\.]*\s*(MPa|kPa|Pa|℃|度|A|V|kW|W|rpm|Hz|mm|cm|m|kg|t|L|%|％)/g,function(m){hits.push(m);return '(数値)'});
   return {text:out,hits:hits};
 }
@@ -330,7 +330,7 @@ function gateAI(q,cc,onSend,onSkip){
    '<div style="font-size:15px;line-height:1.5;margin-bottom:8px">'+(r.hits.length?'次の言葉を伏せ字にしました:<br><b>'+r.hits.map(esc).join('、')+'</b>':'伏せ字にした言葉はありません。')+'<br>送るのは、下の文章だけです。会社の情報が残っていないか、自分の目で確認し、消すか直してください。</div>'+
    '<textarea style="min-height:110px">'+esc(r.text)+'</textarea>'+
    '<div class="row"><button class="btn ok" type="button">この内容で送る</button><button class="btn gray" type="button">送らない</button></div>';
-  document.getElementById('cl').appendChild(box);M.scrollTop=M.scrollHeight;
+  document.getElementById('cl').appendChild(box);try{box.scrollIntoView({block:'start'})}catch(e){M.scrollTop=M.scrollHeight}
   var ta=box.querySelector('textarea'),bs=box.querySelectorAll('button');
   bs[0].onclick=function(){var t=ta.value.trim();box.remove();if(t)onSend(t)};
   bs[1].onclick=function(){box.remove();onSkip()};
