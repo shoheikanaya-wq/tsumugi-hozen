@@ -37,7 +37,7 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 0.5</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 0.6</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script>
@@ -51,7 +51,7 @@ var S={token:0,rec:null,voice:null,inspect:null};
 
 function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
-function cfg(){return Object.assign({voice:true,listen:false,ai:false,useLog:false,key:'',model:'gemini-flash-latest'},load(KEY.cfg,{}))}
+function cfg(){return Object.assign({voice:true,listen:false,ai:false,useLog:false,key:'',model:'gemini-flash-latest',ng:''},load(KEY.cfg,{}))}
 function items(){var a=load(KEY.items,null);return a&&a.length?a:DEFAULT_ITEMS}
 function log(){return load(KEY.log,[])}
 function addLog(e){var l=log();l.unshift(e);save(KEY.log,l.slice(0,500))}
@@ -315,6 +315,26 @@ function localAnswer(q){
     (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
     '\n\n(AIの会話はオフです。設定でオンにすると、もっと具体的に答えられます)';
 }
+function sanitize(t){
+  var c=cfg(),out=String(t),hits=[];
+  String(c.ng||'').split(/\n/).map(function(x){return x.trim()}).filter(Boolean).forEach(function(w){
+    if(out.indexOf(w)>=0){hits.push(w);out=out.split(w).join('(伏せ字)')}});
+  out=out.replace(/[A-Za-zＡ-Ｚａ-ｚ]+[-‐ー－]?[0-9０-９][A-Za-z0-9０-９\-‐－_\/\.]*/g,function(m){hits.push(m);return '(型式・番号)'});
+  out=out.replace(/[^\s、。,.「」()（）]{1,10}(ライン|号機|工場|棟|課|部門|設備室)/g,function(m){hits.push(m);return '(設備・場所)'});
+  out=out.replace(/[0-9０-９][0-9０-９,\.]*\s*(MPa|kPa|Pa|℃|度|A|V|kW|W|rpm|Hz|mm|cm|m|kg|t|L|%|％)/g,function(m){hits.push(m);return '(数値)'});
+  return {text:out,hits:hits};
+}
+function gateAI(q,cc,onSend,onSkip){
+  var r=sanitize(q),box=document.createElement('div');box.className='card';
+  box.innerHTML='<div style="font-weight:800;margin-bottom:6px">🔒 外部のAIに送る前の確認</div>'+
+   '<div style="font-size:15px;line-height:1.5;margin-bottom:8px">'+(r.hits.length?'次の言葉を伏せ字にしました:<br><b>'+r.hits.map(esc).join('、')+'</b>':'伏せ字にした言葉はありません。')+'<br>送るのは、下の文章だけです。会社の情報が残っていないか、自分の目で確認し、消すか直してください。</div>'+
+   '<textarea style="min-height:110px">'+esc(r.text)+'</textarea>'+
+   '<div class="row"><button class="btn ok" type="button">この内容で送る</button><button class="btn gray" type="button">送らない</button></div>';
+  document.getElementById('cl').appendChild(box);M.scrollTop=M.scrollHeight;
+  var ta=box.querySelector('textarea'),bs=box.querySelectorAll('button');
+  bs[0].onclick=function(){var t=ta.value.trim();box.remove();if(t)onSend(t)};
+  bs[1].onclick=function(){box.remove();onSkip()};
+}
 function chat(){
   stopAll();S.chat=S.chat||[];var c=cfg();
   view('紬に話しかける',true,
@@ -343,9 +363,15 @@ function chat(){
       fbx.children[0].onclick=function(){setfb(1,this)};fbx.children[1].onclick=function(){setfb(-1,this)};M.scrollTop=M.scrollHeight}
     var cc=cfg();
     if(cc.ai&&cc.key){
-      var extra='';
-      if(cc.useLog){var sm=similar(q,null);if(sm.length)extra='\n\n【この人の過去の記録(参考)】\n'+sm.map(function(x){return x.at+' '+x.text+(x.note?'(本人のメモ:'+x.note+')':'')}).join('\n')}
-      callAI(S.chat.slice(0,-1),extra).then(done).catch(function(e){done('AIにつながりませんでした('+e.message+')。\n\n'+localAnswer(q))});
+      done(localAnswer(q).replace(/\n\n\(AIの会話はオフです.*$/,''));
+      gateAI(q,cc,function(safe){
+        var ai={role:'model',text:'…'};S.chat.push(ai);paint();
+        var extra='';
+        if(cc.useLog){var sm=similar(safe,null);if(sm.length)extra='\n\n【過去の記録(参考)】\n'+sm.map(function(x){return sanitize(x.text).text}).join('\n')}
+        callAI([{role:'user',text:safe}],extra).then(function(a){ai.text='🤖 AIの返事(送った内容:'+safe.slice(0,40)+(safe.length>40?'…':'')+')\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
+          addLog({id:Date.now()+1,type:'chat',at:now(),text:'[外部AIに送信] '+safe,answer:a,sent:true})})
+        .catch(function(e){ai.text='AIにつながりませんでした('+e.message+')';paint()});
+      },function(){S.chat.push({role:'model',text:'AIには送りませんでした。上の目安だけで進めます。'});paint()});
     }else done(localAnswer(q));
   });
 }
@@ -362,6 +388,7 @@ function settings(){
    '<label class="sw"><input type="checkbox" id="ca"'+(c.ai?' checked':'')+'>AIに相談できるようにする</label>'+
    '<input id="ck" type="password" placeholder="Gemini APIキー(このスマホの中だけに保存)" value="'+esc(c.key)+'" style="width:100%;min-height:48px;border-radius:12px;border:2px solid #46556f;background:#141b28;color:#eef2f8;font-size:16px;padding:0 10px;margin:6px 0">'+
    '<input id="cm" placeholder="モデル名" value="'+esc(c.model)+'" style="width:100%;min-height:48px;border-radius:12px;border:2px solid #46556f;background:#141b28;color:#eef2f8;font-size:16px;padding:0 10px;margin:0 0 6px">'+
+   '<div style="font-weight:700;margin-top:8px">伏せ字にする言葉(1行に1つ。会社名・設備名・社内用語など)</div><textarea id="cng" style="min-height:90px">'+esc(c.ng||'')+'</textarea>'+
    '<label class="sw"><input type="checkbox" id="cu"'+(c.useLog?' checked':'')+'>質問のとき、似た過去の記録も参考として送る(記録の一部がAIに送られます)</label>'+
    '<label class="sw"><input type="checkbox" id="cc">会社の機密(設備の型式・図面・数値など)は入れない。無料枠では、入力が改善に使われる場合があることを理解しました</label>'+
    '<button class="btn ok" id="sv">保存する</button><button class="btn line" id="rs">点検項目を初期にもどす</button>'+
@@ -371,7 +398,7 @@ function settings(){
     var ai=document.getElementById('ca').checked,ok=document.getElementById('cc').checked;
     if(ai&&!ok){alert('AIを使うには、注意事項のチェックが必要です');return}
     save(KEY.items,v.length?v:DEFAULT_ITEMS);
-    save(KEY.cfg,{voice:document.getElementById('cv').checked,listen:document.getElementById('cl').checked,ai:ai,useLog:document.getElementById('cu').checked,key:document.getElementById('ck').value.trim(),model:document.getElementById('cm').value.trim()||'gemini-flash-latest'});
+    save(KEY.cfg,{voice:document.getElementById('cv').checked,listen:document.getElementById('cl').checked,ai:ai,useLog:document.getElementById('cu').checked,key:document.getElementById('ck').value.trim(),model:document.getElementById('cm').value.trim()||'gemini-flash-latest',ng:document.getElementById('cng').value});
     home();
   });
   on('rs',function(){save(KEY.items,DEFAULT_ITEMS);settings()});
