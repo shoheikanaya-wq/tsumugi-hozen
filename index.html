@@ -37,7 +37,7 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.0</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.1</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script>
@@ -45,6 +45,65 @@ label.sw input{width:26px;height:26px}
 'use strict';
 var KEY={items:'tsu_items',log:'tsu_log',cfg:'tsu_cfg',draft:'tsu_draft'};
 var DEFAULT_ITEMS=['外観(漏れ・破損・ゆるみ)','音(いつもと違う音)','振動','熱・におい','計器の値','まわりの清掃・整理'];
+/* 設備の種類ごとの「見るべき要所」。稼働中点検で、外から安全に見られる所だけ。
+   [要所, 見るところ(短く)]。触る・開ける・止めるは、社内の手順と上の人の指示で。 */
+var TYPES=[
+ {id:'pump',label:'ポンプ',items:[
+  ['軸封部(シール・グランド)','漏れの量を見る。シールは漏れないのが基本。グランドは少しの滴下が正常なものもあるので、いつもの量と比べる'],
+  ['軸受(ベアリング)まわり','温度(手をかざす・温度計)と、ゴロゴロ音。前回との差を見る'],
+  ['吐出・吸込の圧力計','いつもの値との差と、針のふれを見る'],
+  ['吸込側の音','ガラガラ・バチバチという音がないか(泡がつぶれる音のことがある)'],
+  ['カップリング・ベース','振動、ボルトのゆるみ、カバーまわりの粉(芯ずれのあと)を見る'],
+  ['まわりの配管・フランジ','にじみ、支えのゆるみを見る']]},
+ {id:'motor',label:'モーター',items:[
+  ['本体の温度','手をかざすか温度計で。前回や、となりの同じ型との差を見る。焦げたにおいがないか'],
+  ['音','うなり、ゴロゴロ、キーンという音がないか。いつもと比べる'],
+  ['振動','足元とベースのボルトを見る'],
+  ['冷却ファン・吸気口','ほこりの詰まり、カバーの破れを見る'],
+  ['電流値(盤の電流計)','いつもの値との差と、ふらつきを見る'],
+  ['端子箱・配線(外から)','変色、ケーブルの傷を見る。開けない']]},
+ {id:'fan',label:'ファン・送風機',items:[
+  ['羽根まわりの音と振動','汚れがつくと揺れが出やすい。いつもと比べる'],
+  ['軸受','温度と音を見る'],
+  ['ベルト(ある場合)','張り、ひび、キュルキュル音、ゴムの粉を見る'],
+  ['吸込口・フィルター','詰まりを見る。差圧計があれば値を見る'],
+  ['ダンパー','開き具合が、いつもの位置か'],
+  ['ベース・防振ゴム','ゆるみと、ゴムのひび・つぶれを見る']]},
+ {id:'comp',label:'コンプレッサー',items:[
+  ['吐出の圧力・温度','いつもの値との差を見る'],
+  ['ドレン','出ているか、量、油が混じっていないか'],
+  ['油面(油を使う型)','油面計の範囲内か、色のにごり'],
+  ['音・振動','いつもと違う打つ音がないか'],
+  ['エア漏れ','配管の継ぎ目でシューという音がないか'],
+  ['吸込フィルター','汚れと詰まりを見る']]},
+ {id:'gear',label:'減速機・ギア',items:[
+  ['油面と油の色','油面計の範囲内か。にごり、金属の粉'],
+  ['ケースの温度','いつもより熱くないか'],
+  ['音','歯車のうなり、カンカンという打つ音'],
+  ['油漏れ','オイルシールと、ケースの合わせ目'],
+  ['取付ボルト・振動','ゆるみと揺れを見る']]},
+ {id:'conv',label:'コンベヤ',items:[
+  ['ベルト・チェーンの張りと片寄り','片側に寄って走っていないか'],
+  ['ローラー・スプロケット','回っていないローラー、すり減りを見る'],
+  ['駆動部の音と温度','モーター・減速機・軸受まわり'],
+  ['非常停止・安全カバー','外れていないか、見るだけ'],
+  ['こぼれ・たまり','落ちた物がたまっていないか'],
+  ['給油(チェーン)','油切れで乾いていないか']]},
+ {id:'pipe',label:'配管・バルブ',items:[
+  ['継手・フランジ','にじみと漏れ'],
+  ['保温材','ぬれ、破れ(中のさびの兆し)'],
+  ['バルブ','開閉の表示がいつも通りか。グランドからの漏れ'],
+  ['支え金具','ゆるみと揺れ'],
+  ['さび・腐食','塗装のふくれ、はがれ'],
+  ['ストレーナー前後の圧力','差が大きくなっていないか(詰まりの兆し)']]},
+ {id:'panel',label:'制御盤・電気',items:[
+  ['表示灯・警報','いつもと違う表示がないか'],
+  ['におい・音','焦げたにおい、ジーという音'],
+  ['盤の温度・換気','換気ファンが回っているか、フィルターの詰まり'],
+  ['計器の値','電流・電圧が、いつもの値か'],
+  ['扉・パッキン','閉まっているか。ほこりや水の入り口がないか。盤は開けない']]}
+];
+function typeById(id){return TYPES.filter(function(t){return t.id===id})[0]}
 var synth=window.speechSynthesis,SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 var M=document.getElementById('main'),T=document.getElementById('ttl'),B=document.getElementById('back');
 var S={token:0,rec:null,voice:null,inspect:null};
@@ -110,24 +169,35 @@ B.onclick=home;
 /* ---- 点検 ---- */
 function startInspect(){
   stopAll();
-  S.inspect={at:now(),equip:'',results:[],i:0,learn:''};
+  S.inspect={at:now(),equip:'',type:'',list:null,results:[],i:0,learn:''};
   view('点検の前に',true,
-   '<div class="say"><small>紬</small>今日の点検は、どの設備ですか?</div>'+
-   '<textarea id="eq" placeholder="例:○○ライン 〇号機(声でも入力できます)" style="min-height:70px"></textarea>'+
+   '<div class="say"><small>紬</small>どの種類の設備ですか?押すと、見るべき要所の順に点検が始まります。</div>'+
+   '<div class="row" style="flex-wrap:wrap">'+TYPES.map(function(t){return '<button class="btn" data-ty="'+t.id+'" style="flex:1 1 45%;min-height:60px;font-size:19px">'+esc(t.label)+'</button>'}).join('')+'</div>'+
+   '<button class="btn gray" data-ty="" style="min-height:56px;font-size:18px">いつもの項目(設定で決めた項目)</button>'+
    '<div class="mic" id="mic"></div>'+
-   '<button class="btn gray" id="eqMic">🎤 声で入れる</button>'+
-   '<button class="btn" id="eqGo">点検スタート ▶</button>');
-  speak('今日の点検は、どの設備ですか?');
+   '<button class="btn line" id="tyMic">🎤 声で種類を言う(例:「ポンプ」)</button>'+
+   '<details style="margin-top:6px"><summary style="font-size:16px">設備の名前をメモする(なくてもよい)</summary>'+
+   '<textarea id="eq" placeholder="例:〇号機(会社名・型式は書かない)" style="min-height:60px;margin-top:6px"></textarea>'+
+   '<button class="btn gray" id="eqMic">🎤 声で入れる</button></details>');
+  speak('どの種類の設備ですか?');
+  function go(id){var t=typeById(id);stopAll();
+    S.inspect.equip=(document.getElementById('eq').value||'').trim();S.inspect.type=t?t.label:'';
+    S.inspect.list=t?t.items.map(function(x){return {n:x[0],h:x[1]}}):items().map(function(x){return {n:x,h:''}});
+    S.inspect.i=0;ask()}
+  Array.prototype.forEach.call(M.querySelectorAll('[data-ty]'),function(b){b.onclick=function(){go(b.getAttribute('data-ty'))}});
+  on('tyMic',function(){listen(function(t){t=t.replace(/\s/g,'');
+      var hit=TYPES.filter(function(x){return x.label.split('・').some(function(w){return t.indexOf(w)>=0})})[0];
+      if(hit)go(hit.id);else document.getElementById('mic').textContent='「'+t+'」…種類が分かりませんでした。ボタンで選んでください'},
+    function(m){var e=document.getElementById('mic');if(e)e.textContent=m})});
   on('eqMic',function(){listen(function(t){document.getElementById('eq').value=t;document.getElementById('mic').textContent=''},function(m){document.getElementById('mic').textContent=m})});
-  on('eqGo',function(){S.inspect.equip=document.getElementById('eq').value.trim();S.inspect.i=0;ask()});
 }
 function ask(){
-  var I=S.inspect,list=items();
+  var I=S.inspect,list=I.list||items().map(function(x){return {n:x,h:''}});
   if(I.i>=list.length)return learn();
-  var my=++S.token,it=list[I.i];
+  var my=++S.token,cur=list[I.i],it=cur.n;
   view('点検 '+(I.i+1)+'/'+list.length,true,
-   '<div class="prog">'+esc(I.equip||'点検中')+'</div>'+
-   '<div class="say"><small>紬</small>'+esc(it)+'は、どうですか?</div>'+
+   '<div class="prog">'+esc((I.type?I.type+' ':'')+(I.equip||''))+'</div>'+
+   '<div class="say"><small>紬</small>'+esc(it)+'は、どうですか?'+(cur.h?'<span style="display:block;font-size:17px;font-weight:700;color:#cfe0ff;margin-top:6px">見るところ:'+esc(cur.h)+'</span>':'')+'</div>'+
    '<div class="row"><button class="btn ok" id="rOk">正常</button><button class="btn warn" id="rWarn">気になる</button></div>'+
    '<div class="row"><button class="btn ng" id="rNg">異常</button><button class="btn gray" id="rSkip">とばす</button></div>'+
    '<div class="mic" id="mic"></div>'+
@@ -138,7 +208,7 @@ function ask(){
   on('rOk',function(){go('ok')});on('rWarn',function(){go('warn')});on('rNg',function(){go('ng')});on('rSkip',function(){go('skip')});
   function voiceAns(){listen(function(t){var r=judge(t);if(r)go(r);else{document.getElementById('mic').textContent='「'+t+'」…もう一度お願いします';setTimeout(voiceAns,600)}},function(m){var e=document.getElementById('mic');if(e)e.textContent=m})}
   on('rMic',voiceAns);
-  speak(it+'は、どうですか?').then(function(){if(my===S.token&&cfg().listen)voiceAns()});
+  speak(it+'。'+(cur.h?cur.h+'。':'')+'どうですか?').then(function(){if(my===S.token&&cfg().listen)voiceAns()});
 }
 function detail(it,r){
   var I=S.inspect;
@@ -167,7 +237,7 @@ function learn(){
   on('lGo',function(){
     stopAll();I.learn=document.getElementById('ln').value.trim();
     var ng=I.results.filter(function(x){return x.r==='ng'}).length,warn=I.results.filter(function(x){return x.r==='warn'}).length;
-    addLog({type:'inspect',at:I.at,equip:I.equip,results:I.results,ng:ng,warn:warn,learn:I.learn});
+    addLog({type:'inspect',at:I.at,equip:(I.type?I.type+(I.equip?' ':''):'')+I.equip,results:I.results,ng:ng,warn:warn,learn:I.learn});
     view('保存しました',false,'<div class="say"><small>紬</small>保存しました。異常 '+ng+' 件、気になる '+warn+' 件でした。'+(ng?'異常はすぐに上の人へ連絡してくださいね。':'おつかれさまでした。')+'</div><button class="btn" id="hm">ホームへ</button>');
     on('hm',home);speak('保存しました。異常は'+ng+'件、気になるは'+warn+'件でした。');
   });
@@ -424,7 +494,7 @@ function settings(){
   on('rs',function(){save(KEY.items,DEFAULT_ITEMS);settings()});
 }
 
-window.TSU_TEST={items:items,log:log,replyFor:replyFor,report:report,similar:similar};
+window.TSU_TEST={items:items,log:log,replyFor:replyFor,report:report,similar:similar,TYPES:TYPES};
 home();
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(function(){})}
 })();
