@@ -37,9 +37,10 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.1</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.2</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
+<script src="kb.js"></script>
 <script>
 (function(){
 'use strict';
@@ -293,6 +294,8 @@ function similarHtml(list){
 }
 function replyHtml(h,text,at,selfId){
   var rep=(h.urgent?'<div class="card urgent"><b>⚠ 安全を最優先にしてください</b></div>':'');
+  var kb=(typeof kbFind==='function')?kbFind(text):null;
+  if(kb)rep+='<h3>紬の答え:'+esc(kb.t)+'</h3><div class="card" style="white-space:pre-wrap;font-size:17px;line-height:1.6">'+esc(kb.a)+'</div>';
   return '<div class="rep">'+rep+
     '<h3>まず</h3><ul>'+h.now.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>'+
     similarHtml(similar(text,selfId))+'<h3>教えてください(分かる範囲で)</h3><ul>'+h.ask.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>'+
@@ -381,9 +384,13 @@ function callAI(history,extra){
     if(!t)throw new Error('返事が空でした');return t;
   });
 }
-function localAnswer(q){
+function localAnswer(q,prev){
   var h=replyFor(q),sim=similar(q,null);
-  return (h.urgent?'⚠ 安全を最優先にしてください。\n':'')+'まず:\n'+h.now.map(function(x){return '・'+x}).join('\n')+'\n\n教えてください:\n'+h.ask.map(function(x){return '・'+x}).join('\n')+
+  var kb=kbFind(q)||(prev?kbFind(prev+' '+q):null);
+  if(kb)return (kb.urgent?'':'')+'【'+kb.t+'】'+(kb.mine?'(あなたが教えてくれた答え)':'')+'\n'+kb.a+
+    (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
+    '\n\n(一般的な目安です。メーカー・社内の基準を優先してください)';
+  return '⚠KB_MISS'+ (h.urgent?'⚠ 安全を最優先にしてください。\n':'')+'まず:\n'+h.now.map(function(x){return '・'+x}).join('\n')+'\n\n教えてください:\n'+h.ask.map(function(x){return '・'+x}).join('\n')+
     (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
     '\n\n(AIの会話はオフです。設定でオンにすると、もっと具体的に答えられます)';
 }
@@ -439,30 +446,39 @@ function chat(){
   }
   paint();
   on('cMic',function(){listen(function(t){var e=document.getElementById('cq');e.value=(e.value?e.value+' ':'')+t;document.getElementById('mic').textContent=''},function(m){document.getElementById('mic').textContent=m})});
-  on('cNew',function(){S.chat=[];chat()});
+  on('cNew',function(){S.chat=[];S.aiHist=[];S.prevQ='';chat()});
   on('cSend',function(){
     var q=document.getElementById('cq').value.trim();if(!q)return;
     document.getElementById('cq').value='';
     S.chat.push({role:'user',text:q});S.chat.push({role:'model',text:'…'});paint();var kind=classify(q);
     var idx=S.chat.length-1;
-    function done(a){S.chat[idx].text='【紬の見立て:'+kind+'】\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
+    var miss=false;
+    function done(a){if(a.indexOf('⚠KB_MISS')===0){miss=true;a='その質問には、まだ答えを持っていません。分かる範囲で、目安を出します。\n\n'+a.slice(8)}
+      S.chat[idx].text='【紬の見立て:'+kind+'】\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
       var en={id:Date.now(),type:'chat',at:now(),text:q,answer:a,kind:kind};addLog(en);
       var fbx=document.createElement('div');fbx.className='row';fbx.innerHTML='<button class="btn ok" type="button">👍 役に立った</button><button class="btn warn" type="button">👎 違う</button>';
       document.getElementById('cl').appendChild(fbx);
       function setfb(v,btn){en.feedback=v;var l=log();for(var i=0;i<l.length;i++){if(l[i].id===en.id){l[i]=en;break}}save(KEY.log,l);btn.textContent='記録しました ✓'}
-      fbx.children[0].onclick=function(){setfb(1,this)};fbx.children[1].onclick=function(){setfb(-1,this)};M.scrollTop=M.scrollHeight}
+      fbx.children[0].onclick=function(){setfb(1,this)};fbx.children[1].onclick=function(){setfb(-1,this)};
+      var tb=document.createElement('div');tb.className='card';
+      tb.innerHTML='<div style="font-size:15px;margin-bottom:6px">'+(miss?'答えを知っていたら、紬に教えてください。次から同じ質問に答えます。':'もっと良い答えを知っていたら、教えてください。')+'</div><textarea style="min-height:60px" placeholder="正しい答え・自分ならこうする"></textarea><button class="btn gray" type="button">📝 紬に教える</button>';
+      document.getElementById('cl').appendChild(tb);
+      tb.querySelector('button').onclick=function(){var v=tb.querySelector('textarea').value.trim();if(!v)return;kbTeach(q,v);this.textContent='覚えました ✓';this.disabled=true};
+      M.scrollTop=M.scrollHeight}
+    var prevQ=S.prevQ||'';S.prevQ=q;
     var cc=cfg();
     if(cc.ai&&cc.key){
-      done(localAnswer(q).replace(/\n\n\(AIの会話はオフです.*$/,''));
+      done(localAnswer(q,prevQ).replace(/\n\n\(AIの会話はオフです.*$/,''));
       gateAI(q,cc,function(safe){
         var ai={role:'model',text:'…'};S.chat.push(ai);paint();
         var extra='';
         if(cc.useLog){var sm=similar(safe,null);if(sm.length)extra='\n\n【過去の記録(参考)】\n'+sm.map(function(x){return sanitize(x.text,true).text}).join('\n')}
-        callAI([{role:'user',text:safe}],extra).then(function(a){ai.text='🤖 AIの返事(送った内容:'+safe.slice(0,40)+(safe.length>40?'…':'')+')\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
+        S.aiHist=S.aiHist||[];var hist=S.aiHist.slice(-8).concat([{role:'user',text:safe}]);
+        callAI(hist,extra).then(function(a){S.aiHist.push({role:'user',text:safe},{role:'model',text:a});ai.text='🤖 AIの返事(送った内容:'+safe.slice(0,40)+(safe.length>40?'…':'')+')\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
           addLog({id:Date.now()+1,type:'chat',at:now(),text:'[外部AIに送信] '+safe,answer:a,sent:true})})
         .catch(function(e){ai.text='AIにつながりませんでした('+e.message+')';paint()});
       },function(){S.chat.push({role:'model',text:'AIには送りませんでした。上の目安だけで進めます。'});paint()});
-    }else done(localAnswer(q));
+    }else done(localAnswer(q,prevQ));
   });
 }
 

@@ -1,5 +1,5 @@
 /* sw.js : 紬 保全パートナー用の裏方。通信できるときは常に最新、できないときだけ保存分を使う */
-var CACHE='tsumugi-v1';
+var CACHE='tsumugi-v2';
 self.addEventListener('install',function(){self.skipWaiting()});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.filter(function(n){return n!==CACHE}).map(function(n){return caches.delete(n)}))}).then(function(){return self.clients.claim()}))});
 self.addEventListener('fetch',function(e){
