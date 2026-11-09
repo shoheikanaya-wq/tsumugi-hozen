@@ -37,7 +37,7 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.3.1</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.4</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script src="kb.js"></script>
@@ -157,7 +157,8 @@ function home(){
   var last=l[0]?('前回の点検:'+l[0].at+'(異常'+l[0].ng+'・気になる'+l[0].warn+')'):'まだ点検の記録はありません';
   view('紬',false,
    '<div class="say"><small>紬</small>おつかれさまです。気になることがあれば、まず話しかけてください。一緒に考えます。<br><span style="font-size:15px;font-weight:700;color:#a9b6cc">'+esc(last)+'</span></div>'+
-   '<button class="btn" id="bChat" style="background:#6b4fc9;min-height:130px;font-size:28px">🗨 紬に話しかける<br><small style="font-size:16px;font-weight:700">状況を話すだけ。正常か異常かも、一緒に考えます</small></button>'+
+   '<a class="btn" href="https://claude.ai/artifact/DThS6xGuYkgZKzKeWQcPib" target="_blank" rel="noopener" style="background:#4a2fa8;min-height:110px;font-size:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-decoration:none;color:#fff">💬 考える紬に相談する<small style="font-size:15px;font-weight:700">AIで答えます(Claudeアプリで開きます)</small></a>'+
+   '<button class="btn" id="bChat" style="background:#6b4fc9;min-height:90px;font-size:22px">🗨 紬に話しかける<br><small style="font-size:16px;font-weight:700">状況を話すだけ。正常か異常かも、一緒に考えます</small></button>'+
    '<div class="row"><button class="btn gray" id="bStart">▶ 点検をはじめる</button><button class="btn gray" id="bLog">📖 見聞録</button></div>'+
    '<button class="btn line" id="bSet" style="min-height:48px;font-size:16px">⚙ 設定</button>'+
    '<div class="note">記録はこのスマホの中だけに保存されます。外部には送りません。</div>');
