@@ -71,6 +71,6 @@ function kbTaught(){try{return JSON.parse(localStorage.getItem('tsu_kb')||'[]')}
 function kbTeach(q,a){
   var words=String(q).replace(/[?？。、!！\s]/g,' ').split(/(?:は|が|を|に|で|と|の|って|とき|ですか|ますか|ください|教えて|どう|なぜ|何|いつ|どれ|する|した|して)/).map(function(s){return s.trim()}).filter(function(s){return s.length>=2});
   if(!words.length)words=[String(q).slice(0,6)];
-  var l=kbTaught();l.unshift({t:q.slice(0,40),k:words.slice(0,6),a:a,mine:true});
+  var l=kbTaught();l.unshift({t:q.slice(0,40),k:words.slice(0,6),a:a,mine:true,at:Date.now()});
   try{localStorage.setItem('tsu_kb',JSON.stringify(l.slice(0,300)))}catch(e){}
 }

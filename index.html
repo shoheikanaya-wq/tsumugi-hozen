@@ -37,7 +37,7 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.2</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.3</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script src="kb.js"></script>
@@ -365,11 +365,42 @@ function showLog(){
     if(x.type==='chat')return '<div class="card"><span class="tag">質疑</span><b>'+esc(x.at)+'</b><div class="m">Q:'+esc(x.text)+'\nA:'+esc((x.answer||'').slice(0,300))+'</div></div>';
     return '<div class="card"><span class="tag '+(x.type==='abnormal'?'ng':'')+'">'+(x.type==='abnormal'?'異常':'相談')+'</span><b>'+esc(x.at)+'</b><div class="m">'+esc(x.text)+'</div></div>';
   }).join(''):'<div class="say"><small>紬</small>まだ記録がありません。</div>';
-  view('見聞録',true,h+'<button class="btn gray" id="exp">⬇ 記録を書き出す(テキスト)</button><button class="btn line" id="cp">📋 コピーする</button>'+(l.length?'<button class="btn line" id="dl" style="color:#ff9b9b">🗑 見聞録をすべて消す</button>':''));
+  view('見聞録',true,h+'<button class="btn" id="share" style="background:#6b4fc9">🤝 学びを3人に渡す</button><button class="btn gray" id="exp">⬇ 記録を書き出す(テキスト)</button><button class="btn line" id="cp">📋 コピーする</button>'+(l.length?'<button class="btn line" id="dl" style="color:#ff9b9b">🗑 見聞録をすべて消す</button>':''));
   function text(){return log().map(function(x){return x.type==='inspect'?('[点検] '+x.at+' '+x.equip+' 異常'+x.ng+' 気になる'+x.warn+x.results.filter(function(r){return r.r!=='ok'}).map(function(r){return ' / '+r.item+':'+r.memo}).join('')+(x.learn?' / 学び:'+x.learn:'')):(x.type==='chat'?('[質疑] '+x.at+' Q:'+x.text+' A:'+(x.answer||'').slice(0,300)):'['+(x.type==='abnormal'?'異常':'相談')+'] '+x.at+' '+x.text+(x.feedback?' / '+(x.feedback>0?'役に立った':'違う')+(x.fbNote?':'+x.fbNote:''):''))}).join('\n')}
   on('exp',function(){var b=new Blob([text()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tsumugi-kenmonroku.txt';a.click()});
   on('cp',function(){try{navigator.clipboard.writeText(text())}catch(e){}});
+  on('share',shareLearn);
   var armed=false;on('dl',function(){var b=document.getElementById('dl');if(!armed){armed=true;b.textContent='もう一度押すと、すべて消えます(元に戻せません)';setTimeout(function(){armed=false;if(b)b.textContent='🗑 見聞録をすべて消す'},5000)}else{save(KEY.log,[]);showLog()}});
+}
+
+/* ---- 学びを3人(遥・栞・紬)に渡す ----
+   渡すのは「学び」と「自分のメモ」と「紬に教えた答え」だけ。現場の生の記録は渡さない。
+   会社が分かる言葉・型式・数値は伏せ字にし、送る前に必ず画面で確かめる。 */
+var HONNE_URL='https://claude.ai/artifact/SebKHuBL6YSze2dmWktxvR';
+function learnText(){
+  var since=load('tsu_shared',0),out=[];
+  log().forEach(function(x){
+    var t=x.id||new Date(String(x.at||'').replace(/\//g,'-').replace(' ','T')).getTime()||0;
+    if(t<=since)return;
+    if(x.type==='inspect'){if(x.learn)out.push('・点検の学び:'+x.learn);
+      (x.results||[]).forEach(function(r){if(r.fbNote)out.push('・自分の判断:'+r.item+' → '+r.fbNote)})}
+    else if(x.fbNote)out.push('・自分の判断:'+x.fbNote);
+  });
+  kbTaught().forEach(function(k){if((k.at||0)>since)out.push('・紬に教えた答え:'+k.t+' → '+k.a)});
+  return sanitize(out.join('\n'),true).text;
+}
+function shareLearn(){
+  stopAll();var t=learnText();
+  view('学びを3人に渡す',true,
+   '<div class="say" style="font-size:16px"><small>紬</small>'+(t?'前回渡したあとの学びです。会社が分かる言葉・型式・数値は伏せ字にしました。直してから渡してください。':'前回渡したあと、新しい学びはまだありません。')+'</div>'+
+   '<textarea id="st" style="min-height:180px">'+esc(t)+'</textarea>'+
+   '<button class="btn ok" id="sgo">📋 コピーして本音会議を開く</button>'+
+   '<div class="note">本音会議の「紬保全からの学び」欄に貼ると、毎朝3人の共有記憶に入ります。会社名・設備名・型式・図面・数値は残さないでください。</div>');
+  on('sgo',function(){var v=document.getElementById('st').value.trim();if(!v)return;
+    try{navigator.clipboard.writeText(v)}catch(e){}
+    save('tsu_shared',Date.now());
+    document.getElementById('sgo').textContent='コピーしました ✓ 本音会議を開きます';
+    setTimeout(function(){window.open(HONNE_URL,'_blank')},600)});
 }
 
 /* ---- 質問(会話) ---- */
@@ -399,7 +430,7 @@ function sanitize(t,strict){
   String(c.ng||'').split(/\n/).map(function(x){return x.trim()}).filter(Boolean).forEach(function(w){
     var p=w.split(/[=＝]/),from=p[0].trim(),to=(p[1]||'').trim();
     if(from&&out.indexOf(from)>=0){hits.push(to?from+'→'+to:from);out=out.split(from).join(to||'(伏せ字)')}});
-  out=out.replace(/[^\s、。,.「」()（）]{1,10}(ライン|号機|工場|棟|課|部門|設備室)/g,function(m){var p=/^[のがはをにでと]/.test(m)?m.charAt(0):'';hits.push(p?m.slice(1):m);return p+'(設備・場所)'});
+  out=out.replace(/[^\s、。,.「」()（）:：・→]{1,10}(ライン|号機|工場|棟|課|部門|設備室)/g,function(m){var p=/^[のがはをにでと]/.test(m)?m.charAt(0):'';hits.push(p?m.slice(1):m);return p+'(設備・場所)'});
   if(strict)out=out.replace(/[A-Za-zＡ-Ｚａ-ｚ]+[-‐ー－]?[0-9０-９][A-Za-z0-9０-９\-‐－_\/\.]*/g,function(m){hits.push(m);return '(型式・番号)'});
   if(strict)out=out.replace(/[0-9０-９][0-9０-９,\.]*\s*(MPa|kPa|Pa|℃|度|A|V|kW|W|rpm|Hz|mm|cm|m|kg|t|L|%|％)/g,function(m){hits.push(m);return '(数値)'});
   return {text:out,hits:hits};
