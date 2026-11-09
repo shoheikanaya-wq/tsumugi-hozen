@@ -37,7 +37,7 @@ label.sw input{width:26px;height:26px}
 </head>
 <body>
 <div class="app">
- <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.3</span><button id="back" type="button" style="display:none">← 戻る</button></header>
+ <header><h1 id="ttl">紬</h1><span class="ver">Ver 1.3.1</span><button id="back" type="button" style="display:none">← 戻る</button></header>
  <main id="main"></main>
 </div>
 <script src="kb.js"></script>
@@ -421,6 +421,11 @@ function localAnswer(q,prev){
   if(kb)return (kb.urgent?'':'')+'【'+kb.t+'】'+(kb.mine?'(あなたが教えてくれた答え)':'')+'\n'+kb.a+
     (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
     '\n\n(一般的な目安です。メーカー・社内の基準を優先してください)';
+  var hitRule=RULES.some(function(r){return r.k.test(q)});
+  var equip=hitRule||/設備|機械|装置|ポンプ|モーター|モータ|ファン|コンプ|配管|バルブ|盤|電気|点検|保全|修理|交換|故障|異常|止ま|動かな|警報|アラーム|エラー|センサ|油|エア|圧|温度|電流|ボルト|部品/.test(q);
+  if(!equip)return '⚠KB_MISS'+'その話は、まだ紬の知っていることが少ないです。いっしょに考えたいので、もう少しくわしく教えてください。\n\n・何に困っていますか?\n・どうなったらいいと思っていますか?'+
+    (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
+    '\n\n(答えを知っていたら、下の「紬に教える」から教えてください。次から答えます)';
   return '⚠KB_MISS'+ (h.urgent?'⚠ 安全を最優先にしてください。\n':'')+'まず:\n'+h.now.map(function(x){return '・'+x}).join('\n')+'\n\n教えてください:\n'+h.ask.map(function(x){return '・'+x}).join('\n')+
     (sim.length?'\n\n前にも似た記録があります:\n'+sim.map(function(x){return '・'+x.at+' '+x.text+(x.note?'(あなたのメモ:'+x.note+')':'')}).join('\n'):'')+
     '\n\n(AIの会話はオフです。設定でオンにすると、もっと具体的に答えられます)';
@@ -484,7 +489,7 @@ function chat(){
     S.chat.push({role:'user',text:q});S.chat.push({role:'model',text:'…'});paint();var kind=classify(q);
     var idx=S.chat.length-1;
     var miss=false;
-    function done(a){if(a.indexOf('⚠KB_MISS')===0){miss=true;a='その質問には、まだ答えを持っていません。分かる範囲で、目安を出します。\n\n'+a.slice(8)}
+    function done(a){if(a.indexOf('⚠KB_MISS')===0){miss=true;a=a.slice(8);if(a.indexOf('その話は')!==0)a='その質問には、まだ答えを持っていません。分かる範囲で、目安を出します。\n\n'+a}
       S.chat[idx].text='【紬の見立て:'+kind+'】\n\n'+a;paint();speak(a.replace(/\n/g,'。').slice(0,300));
       var en={id:Date.now(),type:'chat',at:now(),text:q,answer:a,kind:kind};addLog(en);
       var fbx=document.createElement('div');fbx.className='row';fbx.innerHTML='<button class="btn ok" type="button">👍 役に立った</button><button class="btn warn" type="button">👎 違う</button>';
